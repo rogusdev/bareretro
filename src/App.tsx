@@ -1,8 +1,15 @@
-import React from 'react';
+
+import React, {
+  useState,
+  useEffect
+} from 'react';
+
 import {
   Switch,
   Route,
-  Link
+  NavLink,
+  Link,
+  useParams
 } from 'react-router-dom';
 
 import {
@@ -12,19 +19,81 @@ import {
 import './App.css';
 
 
+interface IdParams {
+  id: string;
+}
+
+interface Board {
+  id: string;
+  title: string;
+  owner: string;
+  created_at: number;
+}
+
+interface Column {
+  id: string;
+  board_id: string;
+  order: number;
+  title: string;
+  created_at: number;
+}
+
+interface Card {
+  id: string;
+  column_id: string;
+  order: number;
+  title: string;
+  author: string;
+  created_at: number;
+}
+
+interface Comment {
+  id: string;
+  card_id: string;
+  contents: string;
+  author: string;
+  created_at: number;
+}
+
+interface Vote {
+  id: string;
+  card_id: string;
+  author: string;
+  created_at: number;
+}
+
+interface Tag {
+  id: string;
+  board_id: string;
+  title: string;
+  created_at: number;
+}
+
+interface CardTag {
+  id: string;
+  card_id: string;
+  tag_id: string;
+  created_at: number;
+}
+
+
 export default function App() {
   return (
     <div>
       <nav>
         <ul>
           <li>
-            <Link to="/">Home</Link>
+            <NavLink to="/">Home</NavLink>
           </li>
           <li>
-            <Link to="/about">About</Link>
+            <NavLink to="/boards">Boards</NavLink>
+          </li>
+
+          <li>
+            <NavLink to="/about">About</NavLink>
           </li>
           <li>
-            <Link to="/users">Users</Link>
+            <NavLink to="/users">Users</NavLink>
           </li>
         </ul>
       </nav>
@@ -32,21 +101,28 @@ export default function App() {
       {/* A <Switch> looks through its children <Route>s and
           renders the first one that matches the current URL. */}
       <Switch>
+        <Route path="/board/:id">
+          <BoardComponent />
+        </Route>
+        <Route path="/boards">
+          <MyBoardsComponent />
+        </Route>
+
         <Route path="/about">
-          <About />
+          <AboutComponent />
         </Route>
         <Route path="/users">
-          <Users />
+          <UsersComponent />
         </Route>
         <Route path="/">
-          <Home />
+          <HomeComponent />
         </Route>
       </Switch>
     </div>
   );
 }
 
-function Home() {
+function HomeComponent () {
   return (
     <div>
       <h2>Home</h2>
@@ -57,7 +133,49 @@ function Home() {
   );
 }
 
-function About() {
+function MyBoardsComponent () {
+  const [boards, setBoards] = useState<Board[]>([]);
+
+  useEffect(() => {
+    fetch('https://jsonplaceholder.typicode.com/todos')
+      .then(response => response.json())
+      .then(json => setBoards(json))
+  });
+
+  return (
+    <div>
+      <h2>Boards</h2>
+      {boards.map((board, index) => (
+          <div key={index}>
+            <Link to={"/board/" + board.id}>{board.title}</Link>
+          </div>
+        ))}
+    </div>
+  );
+}
+
+function BoardComponent () {
+  const { id } = useParams<IdParams>();
+  const [board, setBoard] = useState<Board | null>(null);
+
+  useEffect(() => {
+    fetch('https://jsonplaceholder.typicode.com/todos/' + id)
+      .then(response => response.json())
+      .then(json => setBoard(json))
+  });
+
+  return (
+    <div>
+      <h2>Board {id}</h2>
+      {board
+        ? <p>{board.title}</p>
+        : <p>Loading...</p>
+      }
+    </div>
+  );
+}
+
+function AboutComponent () {
   return (
     <div>
       <h2>About</h2>
@@ -68,7 +186,7 @@ function About() {
   );
 }
 
-function Users() {
+function UsersComponent () {
   return (
     <div>
       <h2>Users</h2>
