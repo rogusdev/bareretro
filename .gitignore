@@ -1,4 +1,6 @@
-.idea
-.vagrant
-.vscode
-node_modules
+.idea/
+.vagrant/
+.vscode/
+node_modules/
+target/
+.env
