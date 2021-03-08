@@ -13,7 +13,7 @@ use actix_web::{web, App, HttpServer};
 use crate::time_provider::{SystemTimeProvider, TimeProvider};
 use crate::models::{Config, Storage, Service};
 use crate::storage::{invalid, postgres};
-use crate::handlers::{not_found, add_board, list_boards, delete_board};
+use crate::handlers::{not_found, add_board, list_boards, get_board, delete_board};
 
 
 fn build_service () -> Service {
@@ -52,6 +52,7 @@ async fn main() -> std::io::Result<()> {
                 web::scope("/api")
                     .route("boards", web::post().to(add_board))
                     .route("boards", web::get().to(list_boards))
+                    .route("boards/{id}", web::get().to(get_board))
                     .route("boards/{id}", web::delete().to(delete_board))
             )
             // https://github.com/actix/actix-website/blob/master/content/docs/url-dispatch.md

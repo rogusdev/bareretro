@@ -60,7 +60,8 @@ pub trait Storage : Clone {
     fn name(&self) -> &'static str;
     async fn add_board (&self, item: &Board) -> Result<bool, MyError>;
     async fn list_boards (&self) -> Result<Vec<Board>, MyError>;
-    async fn delete_board(&self, id: &String) -> Result<bool, MyError>;
+    async fn get_board (&self, id: &String) -> Result<Board, MyError>;
+    async fn delete_board (&self, id: &String) -> Result<bool, MyError>;
 }
 
 #[derive(Clone)]

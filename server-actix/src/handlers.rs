@@ -19,19 +19,6 @@ fn check_rate_limit (req: &HttpRequest) -> Result<bool, HttpResponse> {
     }
 }
 
-pub async fn list_boards (
-    _req: HttpRequest,
-    service: web::Data<Service>,
-) -> Result<web::Json<Vec<Board>>, HttpResponse> {
-    println!("list boards");
-    // check_api_key(&req, service.config.api_key_links.as_str())?;
-
-    match service.storage.list_boards().await {
-        Ok(boards) => Ok(web::Json(boards)),
-        Err(why) => Err(HttpResponse::InternalServerError().body(format!("List boards failed! {}", why))),
-    }
-}
-
 pub async fn add_board (
     req: HttpRequest,
     payload: web::Json<CreateBoard>,
@@ -62,6 +49,37 @@ pub async fn add_board (
     } else {
         Err(HttpResponse::BadRequest().body("Invalid request for create board!"))
     }
+}
+
+pub async fn list_boards (
+    _req: HttpRequest,
+    service: web::Data<Service>,
+) -> Result<web::Json<Vec<Board>>, HttpResponse> {
+    println!("list boards");
+    // check_api_key(&req, service.config.api_key_links.as_str())?;
+
+    match service.storage.list_boards().await {
+        Ok(boards) => Ok(web::Json(boards)),
+        Err(why) => Err(HttpResponse::InternalServerError().body(format!("List boards failed! {}", why))),
+    }
+}
+
+pub async fn get_board (
+    req: HttpRequest,
+    service: web::Data<Service>
+) -> Result<web::Json<Board>, HttpResponse> {
+    println!("get board");
+    if let Err(badreq) = check_rate_limit(&req) {
+        return Err(badreq)
+    }
+
+    let id = req.match_info().get("id").unwrap().to_string();
+    return match service.storage.get_board(&id).await {
+        Ok(item) => Ok(web::Json(item)),
+        Err(why) => Err(HttpResponse::NotFound().body(
+            format!("Could not find board for id {}: {}",  id, why)
+        ))
+    };
 }
 
 pub async fn delete_board (

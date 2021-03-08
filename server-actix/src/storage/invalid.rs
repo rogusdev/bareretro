@@ -24,6 +24,10 @@ impl Storage for InvalidStorage {
         Err(self.error.clone())
     }
 
+    async fn get_board (&self, _id: &String) -> Result<Board, MyError> {
+        Err(self.error.clone())
+    }
+
     async fn delete_board (&self, _id: &String) -> Result<bool, MyError> {
         Err(self.error.clone())
     }

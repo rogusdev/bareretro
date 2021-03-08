@@ -136,11 +136,13 @@ function HomeComponent () {
 function MyBoardsComponent () {
   const [boards, setBoards] = useState<Board[]>([]);
 
+  // https://www.robinwieruch.de/react-hooks-fetch-data
+  //  -- need second arg to avoid infinite loop
   useEffect(() => {
-    fetch('https://jsonplaceholder.typicode.com/todos')
+    fetch('/api/boards')
       .then(response => response.json())
       .then(json => setBoards(json))
-  });
+  }, []);
 
   return (
     <div>
@@ -159,16 +161,22 @@ function BoardComponent () {
   const [board, setBoard] = useState<Board | null>(null);
 
   useEffect(() => {
-    fetch('https://jsonplaceholder.typicode.com/todos/' + id)
+    fetch('/api/boards/' + id)
       .then(response => response.json())
       .then(json => setBoard(json))
-  });
+  }, []);
 
   return (
     <div>
       <h2>Board {id}</h2>
       {board
-        ? <p>{board.title}</p>
+        ? (
+          <div>
+            <p>{board.title}</p>
+            <p>{board.owner}</p>
+            <p>{board.created_at}</p>
+          </div>
+        )
         : <p>Loading...</p>
       }
     </div>

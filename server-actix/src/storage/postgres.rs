@@ -94,18 +94,13 @@ impl Storage for PostgresStorage {
     async fn add_board (&self, item: &Board) -> Result<bool, MyError> {
         match self.client().await?.execute(
             format!(
-                "INSERT INTO {}.{} ({}, {}, {}, {}) VALUES ($1, $2, $3, $4)
-                    ON CONFLICT ({}) DO UPDATE SET {}=$2, {}=$3",
+                "INSERT INTO {}.{} ({}, {}, {}, {}) VALUES ($1, $2, $3, $4)",
                 self.schema,
                 self.table_boards,
                 FIELD_ID,
                 FIELD_TITLE,
                 FIELD_OWNER,
                 FIELD_CREATED_AT,
-
-                FIELD_ID,
-                FIELD_TITLE,
-                FIELD_OWNER,
             ).as_str(),
             &[
                 &item.id,
@@ -135,6 +130,26 @@ impl Storage for PostgresStorage {
         ).await {
             Err(why) => Err(format!("List boards failed: {}", why.to_string())),
             Ok(rows) => try_from_vec(rows, "boards"),
+        }
+    }
+
+    async fn get_board (&self, id: &String) -> Result<Board, MyError> {
+        match self.client().await?.query_one(
+            format!(
+                "SELECT * FROM {}.{} WHERE {} = $1",
+                self.schema,
+                self.table_boards,
+                FIELD_ID,
+            ).as_str(),
+            &[
+                id,
+            ],
+        ).await {
+            Err(why) => Err(format!("List boards failed: {}", why.to_string())),
+            Ok(row) => match Board::try_from(row) {
+                Err(why) => Err(format!("Failed converting board: {}", why)),
+                Ok(item) => Ok(item),
+            }
         }
     }
 
