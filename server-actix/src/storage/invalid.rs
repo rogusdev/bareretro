@@ -1,7 +1,7 @@
 
 use async_trait::async_trait;
 
-use crate::models::{MyError, Storage, Board};
+use crate::models::{MyError, Storage, Board, Column};
 
 
 #[derive(Clone)]
@@ -16,6 +16,7 @@ impl Storage for InvalidStorage {
         "INVALID"
     }
 
+    // BOARDS
     async fn add_board (&self, _item: &Board) -> Result<bool, MyError> {
         Err(self.error.clone())
     }
@@ -29,6 +30,23 @@ impl Storage for InvalidStorage {
     }
 
     async fn delete_board (&self, _id: &String) -> Result<bool, MyError> {
+        Err(self.error.clone())
+    }
+
+    // COLUMNS
+    async fn add_column (&self, _item: &Column) -> Result<bool, MyError> {
+        Err(self.error.clone())
+    }
+
+    async fn list_columns (&self) -> Result<Vec<Column>, MyError>  {
+        Err(self.error.clone())
+    }
+
+    async fn get_column (&self, _id: &String) -> Result<Column, MyError> {
+        Err(self.error.clone())
+    }
+
+    async fn delete_column (&self, _id: &String) -> Result<bool, MyError> {
         Err(self.error.clone())
     }
 }

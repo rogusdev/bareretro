@@ -39,6 +39,33 @@ impl Config {
     }
 }
 
+// https://github.com/dtolnay/async-trait#non-threadsafe-futures
+#[async_trait(?Send)]
+#[clonable]
+pub trait Storage : Clone {
+    fn name(&self) -> &'static str;
+    // BOARDS
+    async fn add_board (&self, item: &Board) -> Result<bool, MyError>;
+    async fn list_boards (&self) -> Result<Vec<Board>, MyError>;
+    async fn get_board (&self, id: &String) -> Result<Board, MyError>;
+    async fn delete_board (&self, id: &String) -> Result<bool, MyError>;
+    // COLUMNS
+    async fn add_column (&self, item: &Column) -> Result<bool, MyError>;
+    async fn list_columns (&self) -> Result<Vec<Column>, MyError>;
+    async fn get_column (&self, id: &String) -> Result<Column, MyError>;
+    async fn delete_column (&self, id: &String) -> Result<bool, MyError>;
+}
+
+#[derive(Clone)]
+pub struct Service {
+    // box vs generics: dynamic vs static dispatch
+    // https://stackoverflow.com/questions/48833009/the-fold-method-cannot-be-invoked-on-a-trait-object
+    pub time_provider: Box<dyn TimeProvider>,
+    pub config: Config,
+    pub storage: Box<dyn Storage>,
+}
+
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Board {
     pub id: String,
@@ -53,22 +80,16 @@ pub struct CreateBoard {
     pub owner: String,
 }
 
-// https://github.com/dtolnay/async-trait#non-threadsafe-futures
-#[async_trait(?Send)]
-#[clonable]
-pub trait Storage : Clone {
-    fn name(&self) -> &'static str;
-    async fn add_board (&self, item: &Board) -> Result<bool, MyError>;
-    async fn list_boards (&self) -> Result<Vec<Board>, MyError>;
-    async fn get_board (&self, id: &String) -> Result<Board, MyError>;
-    async fn delete_board (&self, id: &String) -> Result<bool, MyError>;
+#[derive(Debug, Clone, Serialize)]
+pub struct Column {
+    pub id: String,
+    pub board_id: String,
+    pub title: String,
+    pub created_at: i64,
 }
 
-#[derive(Clone)]
-pub struct Service {
-    // box vs generics: dynamic vs static dispatch
-    // https://stackoverflow.com/questions/48833009/the-fold-method-cannot-be-invoked-on-a-trait-object
-    pub time_provider: Box<dyn TimeProvider>,
-    pub config: Config,
-    pub storage: Box<dyn Storage>,
+#[derive(Deserialize)]
+pub struct CreateColumn {
+    pub board_id: String,
+    pub title: String,
 }

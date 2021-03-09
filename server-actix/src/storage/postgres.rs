@@ -6,7 +6,7 @@ use deadpool_postgres::{Client, Config as DeadpoolConfig, Pool};
 use tokio_postgres::{NoTls, row::Row, types::{FromSql, ToSql}};
 
 use crate::time_provider::TimeProvider;
-use crate::models::{MyError, Config, Storage, Board};
+use crate::models::{MyError, Config, Storage, Board, Column};
 use super::util::{try_from_vec};
 use const_format::formatcp;
 
@@ -23,8 +23,14 @@ const DEFAULT_DBNAME: &'static str = "postgres";
 const FIELD_ID: &'static str = "id";
 const FIELD_TITLE: &'static str = "title";
 const FIELD_OWNER: &'static str = "owner";
+// const FIELD_CONTENTS: &'static str = "contents";
+// const FIELD_AUTHOR: &'static str = "author";
 const FIELD_CREATED_AT: &'static str = "created_at";
 //const FIELD_UPDATED_AT: &'static str = "updated_at";
+
+const FIELD_BOARD_ID: &'static str = "board_id";
+// const FIELD_COLUMN_ID: &'static str = "column_id";
+// const FIELD_CARD_ID: &'static str = "card_id";
 
 
 #[derive(Clone)]
@@ -167,6 +173,7 @@ impl Storage for PostgresStorage {
         "Postgres"
     }
 
+    // BOARDS
     async fn add_board (&self, item: &Board) -> Result<bool, MyError> {
         add(self, item).await
     }
@@ -181,6 +188,23 @@ impl Storage for PostgresStorage {
 
     async fn delete_board(&self, id: &String) -> Result<bool, MyError> {
         delete::<Board>(self, id).await
+    }
+
+    // COLUMNS
+    async fn add_column (&self, item: &Column) -> Result<bool, MyError> {
+        add(self, item).await
+    }
+
+    async fn list_columns (&self) -> Result<Vec<Column>, MyError>  {
+        list(self).await
+    }
+
+    async fn get_column (&self, id: &String) -> Result<Column, MyError> {
+        get(self, id).await
+    }
+
+    async fn delete_column(&self, id: &String) -> Result<bool, MyError> {
+        delete::<Column>(self, id).await
     }
 }
 
@@ -232,6 +256,58 @@ impl TryFrom<Row> for Board {
             id: get_field(&row, FIELD_ID)?,
             title: get_field(&row, FIELD_TITLE)?,
             owner: get_field(&row, FIELD_OWNER)?,
+            created_at: get_field(&row, FIELD_CREATED_AT)?,
+        })
+    }
+}
+
+
+
+const COLUMN_SINGLE: &'static str = "Column";
+const COLUMN_PLURAL: &'static str = "Columns";
+const COLUMN_FIELDS: &'static str = formatcp!(
+    "{}, {}, {}, {}",
+    FIELD_ID,
+    FIELD_BOARD_ID,
+    FIELD_TITLE,
+    FIELD_CREATED_AT,
+);
+
+impl RowCrud for Column {
+    fn name_single () -> &'static str {
+        COLUMN_SINGLE
+    }
+
+    fn name_plural () -> &'static str {
+        COLUMN_PLURAL
+    }
+
+    fn table_name (storage: &PostgresStorage) -> &String {
+        &storage.table_boards
+    }
+
+    fn field_names () -> &'static str {
+        COLUMN_FIELDS
+    }
+
+    fn row_values (&self) -> Vec<&(dyn ToSql + Sync)> {
+        vec![
+            &self.id,
+            &self.board_id,
+            &self.title,
+            &self.created_at,
+        ]
+    }
+}
+
+impl TryFrom<Row> for Column {
+    type Error = MyError;
+
+    fn try_from (row: Row) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: get_field(&row, FIELD_ID)?,
+            board_id: get_field(&row, FIELD_BOARD_ID)?,
+            title: get_field(&row, FIELD_TITLE)?,
             created_at: get_field(&row, FIELD_CREATED_AT)?,
         })
     }

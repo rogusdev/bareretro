@@ -33,7 +33,6 @@ interface Board {
 interface Column {
   id: string;
   board_id: string;
-  order: number;
   title: string;
   created_at: number;
 }
@@ -41,7 +40,6 @@ interface Column {
 interface Card {
   id: string;
   column_id: string;
-  order: number;
   title: string;
   author: string;
   created_at: number;
@@ -73,6 +71,20 @@ interface CardTag {
   id: string;
   card_id: string;
   tag_id: string;
+  created_at: number;
+}
+
+interface CardOrder {
+  id: string;
+  card_id: string;
+  order: number;
+  created_at: number;
+}
+
+interface ColumnOrder {
+  id: string;
+  column_id: string;
+  order: number;
   created_at: number;
 }
 
