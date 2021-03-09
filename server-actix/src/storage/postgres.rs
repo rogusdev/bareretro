@@ -3,11 +3,12 @@ use std::convert::TryFrom;
 use async_trait::async_trait;
 
 use deadpool_postgres::{Client, Config as DeadpoolConfig, Pool};
-use tokio_postgres::{NoTls, row::Row};
+use tokio_postgres::{NoTls, row::Row, types::{FromSql, ToSql}};
 
 use crate::time_provider::TimeProvider;
 use crate::models::{MyError, Config, Storage, Board};
 use super::util::{try_from_vec};
+use const_format::formatcp;
 
 
 const DEFAULT_SCHEMA: &'static str = "bareretro";
@@ -32,26 +33,6 @@ pub struct PostgresStorage {
     schema: String,
     table_boards: String,
     pool: Pool,
-}
-
-impl TryFrom<Row> for Board {
-    type Error = MyError;
-
-    fn try_from(row: Row) -> Result<Self, Self::Error> {
-        // consider: https://docs.rs/tokio-pg-mapper/0.1.8/tokio_pg_mapper/
-        // https://docs.rs/tokio-postgres/0.5.5/tokio_postgres/row/struct.Row.html#method.try_get
-        let id = row.try_get(&FIELD_ID).map_err(|why| format!("Could not get id! {}", why))?;
-        let title = row.try_get(&FIELD_TITLE).map_err(|why| format!("Could not get title! {}", why))?;
-        let owner = row.try_get(&FIELD_OWNER).map_err(|why| format!("Could not get owner! {}", why))?;
-        let created_at = row.try_get(&FIELD_CREATED_AT).map_err(|why| format!("Could not get created_at! {}", why))?;
-
-        Ok(Self {
-            id: id,
-            title: title,
-            owner: owner,
-            created_at: created_at,
-        })
-    }
 }
 
 impl PostgresStorage {
@@ -84,89 +65,174 @@ impl PostgresStorage {
     }
 }
 
+trait RowCrud {
+    fn name_single () -> &'static str;
+    fn name_plural () -> &'static str;
+    fn table_name (storage: &PostgresStorage) -> &String;
+//    fn field_names () -> Vec<&'static str>;
+    fn field_names () -> &'static str;
+    // https://docs.rs/tokio-postgres/0.7.0/tokio_postgres/struct.Client.html#method.execute
+    fn row_values (&self) -> Vec<&(dyn ToSql + Sync)>;
+}
+
+fn get_field<'a, T> (row: &'a Row, field: &'static str) -> Result<T, MyError> where T: FromSql<'a> {
+    row.try_get(field).map_err(|why| format!("Could not get {}! {}", field, why))
+}
+
+fn values_str<T> (values: &Vec<T>) -> String {
+    // TODO: have prepared consts for all anticipated lengths? or at least cache for sizes?
+    (1..values.len())
+        .map(|n| format!("${}", n))
+        .collect::<Vec<String>>()
+        .join(", ")
+}
+
+async fn add<T> (storage: &PostgresStorage, item: &T) -> Result<bool, MyError> where T: RowCrud {
+    let values = item.row_values();
+    match storage.client().await?.execute(
+        format!(
+            "INSERT INTO {}.{} ({}) VALUES ({})",
+            storage.schema,
+            T::table_name(&storage),
+            T::field_names(),
+            values_str(&values),
+        ).as_str(),
+        &values,
+    ).await {
+        Err(why) => Err(format!("Add {} failed: {}", T::name_single(), why.to_string())),
+        Ok(_) => Ok(true)
+    }
+}
+
+async fn list<T> (storage: &PostgresStorage) -> Result<Vec<T>, MyError>
+        where T: RowCrud + TryFrom<Row, Error=MyError> {
+    match storage.client().await?.query(
+        format!(
+            "SELECT {} FROM {}.{}",
+            T::field_names(),
+            storage.schema,
+            T::table_name(&storage),
+        ).as_str(),
+        &[
+        ],
+    ).await {
+        Err(why) => Err(format!("List {} failed: {}", T::name_plural(), why.to_string())),
+        Ok(rows) => try_from_vec(rows, T::name_plural()),
+    }
+}
+
+async fn get<T> (storage: &PostgresStorage, id: &String) -> Result<T, MyError>
+        where T: RowCrud + TryFrom<Row, Error=MyError> {
+    match storage.client().await?.query_one(
+        format!(
+            "SELECT * FROM {}.{} WHERE {} = $1",
+            storage.schema,
+            T::table_name(&storage),
+            FIELD_ID,
+        ).as_str(),
+        &[
+            id,
+        ],
+    ).await {
+        Err(why) => Err(format!("List {} failed: {}", T::name_plural(), why.to_string())),
+        Ok(row) => match T::try_from(row) {
+            Err(why) => Err(format!("Failed converting {}: {}", T::name_single(), why)),
+            Ok(item) => Ok(item),
+        }
+    }
+}
+
+async fn delete<T> (storage: &PostgresStorage, id: &String) -> Result<bool, MyError> where T: RowCrud {
+    match storage.client().await?.execute(
+        format!(
+            "DELETE FROM {}.{} WHERE {} = $1",
+            storage.schema,
+            T::table_name(&storage),
+            FIELD_ID,
+        ).as_str(),
+        &[
+            id,
+        ],
+    ).await {
+        Err(why) => Err(format!("Delete {} failed: {}", T::name_single(), why.to_string())),
+        Ok(update_count) => Ok(update_count == 0)
+    }
+}
+
+
 // https://github.com/dtolnay/async-trait#non-threadsafe-futures
 #[async_trait(?Send)]
 impl Storage for PostgresStorage {
-    fn name(&self) -> &'static str {
+    fn name (&self) -> &'static str {
         "Postgres"
     }
 
     async fn add_board (&self, item: &Board) -> Result<bool, MyError> {
-        match self.client().await?.execute(
-            format!(
-                "INSERT INTO {}.{} ({}, {}, {}, {}) VALUES ($1, $2, $3, $4)",
-                self.schema,
-                self.table_boards,
-                FIELD_ID,
-                FIELD_TITLE,
-                FIELD_OWNER,
-                FIELD_CREATED_AT,
-            ).as_str(),
-            &[
-                &item.id,
-                &item.title,
-                &item.owner,
-                &item.created_at,
-            ],
-        ).await {
-            Err(why) => Err(format!("Add board failed: {}", why.to_string())),
-            Ok(_) => Ok(true)
-        }
+        add(self, item).await
     }
 
     async fn list_boards (&self) -> Result<Vec<Board>, MyError>  {
-        match self.client().await?.query(
-            format!(
-                "SELECT {}, {}, {}, {} FROM {}.{}",
-                FIELD_ID,
-                FIELD_TITLE,
-                FIELD_OWNER,
-                FIELD_CREATED_AT,
-                self.schema,
-                self.table_boards,
-            ).as_str(),
-            &[
-            ],
-        ).await {
-            Err(why) => Err(format!("List boards failed: {}", why.to_string())),
-            Ok(rows) => try_from_vec(rows, "boards"),
-        }
+        list(self).await
     }
 
     async fn get_board (&self, id: &String) -> Result<Board, MyError> {
-        match self.client().await?.query_one(
-            format!(
-                "SELECT * FROM {}.{} WHERE {} = $1",
-                self.schema,
-                self.table_boards,
-                FIELD_ID,
-            ).as_str(),
-            &[
-                id,
-            ],
-        ).await {
-            Err(why) => Err(format!("List boards failed: {}", why.to_string())),
-            Ok(row) => match Board::try_from(row) {
-                Err(why) => Err(format!("Failed converting board: {}", why)),
-                Ok(item) => Ok(item),
-            }
-        }
+        get(self, id).await
     }
 
     async fn delete_board(&self, id: &String) -> Result<bool, MyError> {
-        match self.client().await?.execute(
-            format!(
-                "DELETE FROM {}.{} WHERE {} = $1",
-                self.schema,
-                self.table_boards,
-                FIELD_ID,
-            ).as_str(),
-            &[
-                id,
-            ],
-        ).await {
-            Err(why) => Err(format!("Delete board failed: {}", why.to_string())),
-            Ok(update_count) => Ok(update_count == 0)
-        }
+        delete::<Board>(self, id).await
+    }
+}
+
+
+const BOARD_SINGLE: &'static str = "Board";
+const BOARD_PLURAL: &'static str = "Boards";
+const BOARD_FIELDS: &'static str = formatcp!(
+    "{}, {}, {}, {}",
+    FIELD_ID,
+    FIELD_TITLE,
+    FIELD_OWNER,
+    FIELD_CREATED_AT,
+);
+
+impl RowCrud for Board {
+    fn name_single () -> &'static str {
+        BOARD_SINGLE
+    }
+
+    fn name_plural () -> &'static str {
+        BOARD_PLURAL
+    }
+
+    fn table_name (storage: &PostgresStorage) -> &String {
+        &storage.table_boards
+    }
+
+    fn field_names () -> &'static str {
+        BOARD_FIELDS
+    }
+
+    fn row_values (&self) -> Vec<&(dyn ToSql + Sync)> {
+        vec![
+            &self.id,
+            &self.title,
+            &self.owner,
+            &self.created_at,
+        ]
+    }
+}
+
+impl TryFrom<Row> for Board {
+    type Error = MyError;
+
+    fn try_from (row: Row) -> Result<Self, Self::Error> {
+        // consider: https://docs.rs/tokio-pg-mapper/0.1.8/tokio_pg_mapper/
+        // https://docs.rs/tokio-postgres/0.5.5/tokio_postgres/row/struct.Row.html#method.try_get
+        Ok(Self {
+            id: get_field(&row, FIELD_ID)?,
+            title: get_field(&row, FIELD_TITLE)?,
+            owner: get_field(&row, FIELD_OWNER)?,
+            created_at: get_field(&row, FIELD_CREATED_AT)?,
+        })
     }
 }
