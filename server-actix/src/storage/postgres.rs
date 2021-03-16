@@ -173,6 +173,22 @@ impl Storage for PostgresStorage {
         "Postgres"
     }
 
+    // async fn add<T> (&self, item: &T) -> Result<bool, MyError> {
+    //     add(self, item).await
+    // }
+
+    // async fn list<T> (&self) -> Result<Vec<T>, MyError>  {
+    //     list(self).await
+    // }
+
+    // async fn get<T> (&self, id: &String) -> Result<T, MyError> {
+    //     get(self, id).await
+    // }
+
+    // async fn delete<T> (&self, id: &String) -> Result<bool, MyError> {
+    //     delete::<T>(self, id).await
+    // }
+
     // BOARDS
     async fn add_board (&self, item: &Board) -> Result<bool, MyError> {
         add(self, item).await
@@ -186,7 +202,7 @@ impl Storage for PostgresStorage {
         get(self, id).await
     }
 
-    async fn delete_board(&self, id: &String) -> Result<bool, MyError> {
+    async fn delete_board (&self, id: &String) -> Result<bool, MyError> {
         delete::<Board>(self, id).await
     }
 
@@ -203,7 +219,7 @@ impl Storage for PostgresStorage {
         get(self, id).await
     }
 
-    async fn delete_column(&self, id: &String) -> Result<bool, MyError> {
+    async fn delete_column (&self, id: &String) -> Result<bool, MyError> {
         delete::<Column>(self, id).await
     }
 }

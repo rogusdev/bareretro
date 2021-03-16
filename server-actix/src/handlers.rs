@@ -1,8 +1,9 @@
 
+use std::future::Future;
 use rand::Rng;
 use actix_web::{web, HttpRequest, HttpResponse};
 
-use crate::models::{Service, CreateBoard, Board};
+use crate::models::{Service, MyError, CrudObj, CreateBoard, Board};
 
 
 // TODO: add oauth exchange for token here
@@ -19,12 +20,12 @@ fn check_rate_limit (req: &HttpRequest) -> Result<bool, HttpResponse> {
     }
 }
 
-pub async fn add_board (
+pub async fn add<T : CrudObj,U> (
     req: HttpRequest,
-    payload: web::Json<CreateBoard>,
+    payload: web::Json<U>,
     service: web::Data<Service>,
-) -> Result<web::Json<Board>, HttpResponse> {
-    println!("add board");
+) -> Result<web::Json<T>, HttpResponse> where T :  {
+    println!("add {}", T::name_single());
     // check_api_key(&req, service.config.api_key_links.as_str())?;
     check_rate_limit(&req)?;
 
@@ -35,67 +36,70 @@ pub async fn add_board (
         let n: u64 = rand::thread_rng().gen();
         let id = format!("{:016x}{:016x}", now, n);
 
-        let board = Board {
-            id: id.clone(),
-            title: payload.title.clone(),
-            owner: payload.owner.clone(), // TODO get from auth token
-            created_at: now,
-        };
+        let item = T::new(id, payload, now);
 
-        match service.storage.add_board(&board).await {
-            Ok(_) => Ok(web::Json(board)),
-            Err(why) => Err(HttpResponse::InternalServerError().body(format!("Add board failed! {}", why))),
+        match service.storage.add(&item).await {
+            Ok(_) => Ok(web::Json(item)),
+            Err(why) => Err(HttpResponse::InternalServerError().body(format!("Add {} failed! {}", T::name_single(), why))),
         }
     } else {
-        Err(HttpResponse::BadRequest().body("Invalid request for create board!"))
+        Err(HttpResponse::BadRequest().body(format!("Invalid request for create {}!", T::name_single())))
     }
 }
 
-pub async fn list_boards (
+pub async fn list<T : CrudObj> (
     _req: HttpRequest,
     service: web::Data<Service>,
-) -> Result<web::Json<Vec<Board>>, HttpResponse> {
-    println!("list boards");
+) -> Result<web::Json<Vec<T>>, HttpResponse> {
+    println!("list {}", T::name_single());
     // check_api_key(&req, service.config.api_key_links.as_str())?;
 
-    match service.storage.list_boards().await {
-        Ok(boards) => Ok(web::Json(boards)),
-        Err(why) => Err(HttpResponse::InternalServerError().body(format!("List boards failed! {}", why))),
+    match service.storage.list().await {
+        Ok(items) => Ok(web::Json(items)),
+        Err(why) => Err(HttpResponse::InternalServerError().body(format!("List {} failed! {}", T::name_plural(), why))),
     }
 }
 
-pub async fn get_board (
+pub async fn get<T : CrudObj> (
     req: HttpRequest,
     service: web::Data<Service>
-) -> Result<web::Json<Board>, HttpResponse> {
-    println!("get board");
+) -> Result<web::Json<T>, HttpResponse> {
+    println!("get {}", T::name_single());
     if let Err(badreq) = check_rate_limit(&req) {
         return Err(badreq)
     }
 
     let id = req.match_info().get("id").unwrap().to_string();
-    return match service.storage.get_board(&id).await {
+    return match service.storage.get(&id).await {
         Ok(item) => Ok(web::Json(item)),
         Err(why) => Err(HttpResponse::NotFound().body(
-            format!("Could not find board for id {}: {}",  id, why)
+            format!("Could not find {} for id {}: {}", T::name_single(), id, why)
         ))
     };
+}
+
+pub async fn delete<T : CrudObj> (
+    req: HttpRequest,
+    service: web::Data<Service>,
+    action: fn(&String) -> dyn Future<Output = Result<bool, MyError>>
+) -> HttpResponse {
+    println!("delete {}", T::name_single());
+    if let Err(badreq) = check_rate_limit(&req) {
+        return badreq
+    }
+
+    let id = req.match_info().get("id").unwrap().to_string();
+    match action(&id).await {
+        Ok(_) => HttpResponse::Ok().body(format!("Deleted {}", T::name_single())),
+        Err(why) => HttpResponse::InternalServerError().body(format!("Delete {} failed! {}", T::name_single(), why)),
+    }
 }
 
 pub async fn delete_board (
     req: HttpRequest,
     service: web::Data<Service>
 ) -> HttpResponse {
-    println!("delete board");
-    if let Err(badreq) = check_rate_limit(&req) {
-        return badreq
-    }
-
-    let id = req.match_info().get("id").unwrap().to_string();
-    match service.storage.delete_board(&id).await {
-        Ok(_) => HttpResponse::Ok().body("Board deleted"),
-        Err(why) => HttpResponse::InternalServerError().body(format!("Delete board failed! {}", why)),
-    }
+    delete::<Board>(req, service, service.storage.delete_board)
 }
 
 pub fn not_found () -> HttpResponse {

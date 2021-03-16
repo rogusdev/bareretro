@@ -16,16 +16,13 @@ use crate::storage::{invalid, postgres};
 use crate::handlers::{not_found, add_board, list_boards, get_board, delete_board};
 
 
-fn build_service () -> Service {
-    // https://stackoverflow.com/questions/28219519/are-polymorphic-variables-allowed
-    let time_provider: Box<dyn TimeProvider> = Box::new(SystemTimeProvider {});
-
+fn build_service (time_provider: Box<dyn TimeProvider>) -> Service {
     let config = Config::from_env();
     println!("config {:?}", config);
 
     // https://stackoverflow.com/questions/25383488/how-to-match-a-string-against-string-literals-in-rust
     let storage: Box<dyn Storage> = match config.provider.as_str() {
-        "postgres" => match postgres::PostgresStorage::from_env(time_provider.clone()) {
+        "postgres" => match postgres::PostgresStorage::from_env(time_provider) {
             Err(why) => Box::new(invalid::InvalidStorage { error: format!("Invalid postgres storage provider! {}", why) }),
             Ok(storage) => Box::new(storage),
         },
@@ -45,9 +42,12 @@ fn build_service () -> Service {
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
 
+    // https://stackoverflow.com/questions/28219519/are-polymorphic-variables-allowed
+    let time_provider: Box<dyn TimeProvider> = Box::new(SystemTimeProvider {});
+
     HttpServer::new(|| {
         App::new()
-            .data(build_service())
+            .data(build_service(time_provider))
             .service(
                 web::scope("/api")
                     .route("boards", web::post().to(add_board))

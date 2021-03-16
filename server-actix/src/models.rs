@@ -39,11 +39,23 @@ impl Config {
     }
 }
 
+pub trait CrudObj : Clone {
+    fn name_single () -> &'static str;
+    fn name_plural () -> &'static str;
+    fn new () -> Self;
+}
+
 // https://github.com/dtolnay/async-trait#non-threadsafe-futures
 #[async_trait(?Send)]
 #[clonable]
 pub trait Storage : Clone {
-    fn name(&self) -> &'static str;
+    fn name (&self) -> &'static str;
+
+    // async fn add<T> (&self, item: &T) -> Result<bool, MyError> where T : CrudObj;
+    // async fn list<T> (&self) -> Result<Vec<T>, MyError> where T : CrudObj;
+    // async fn get<T> (&self, id: &String) -> Result<T, MyError> where T : CrudObj;
+    // async fn delete<T> (&self, id: &String) -> Result<bool, MyError> where T : CrudObj;
+
     // BOARDS
     async fn add_board (&self, item: &Board) -> Result<bool, MyError>;
     async fn list_boards (&self) -> Result<Vec<Board>, MyError>;
